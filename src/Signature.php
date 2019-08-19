@@ -75,41 +75,35 @@ class Signature
      */
     public static function calculateSignature($consumerId, $privateKey, $requestUrl, $requestMethod, $timestamp=null)
     {
-        if(is_null($timestamp) || !is_numeric($timestamp)){
-            $timestamp = self::getMilliseconds();
-        }
-
-        /**
-         * Append values into string for signing
-         */
-        $message = $consumerId."\n".$requestUrl."\n".strtoupper($requestMethod)."\n".$timestamp."\n";
-
-        /**
-         * Get RSA object for signing
-         */
-        $rsa = new RSA();
-        $decodedPrivateKey = base64_decode($privateKey);
-        $rsa->setPrivateKeyFormat(RSA::PRIVATE_FORMAT_PKCS8);
-        $rsa->setPublicKeyFormat(RSA::PRIVATE_FORMAT_PKCS8);
-
-        /**
-         * Load private key
-         */
-        if($rsa->loadKey($decodedPrivateKey,RSA::PRIVATE_FORMAT_PKCS8)){
-            /**
-             * Make sure we use SHA256 for signing
-             */
-            $rsa->setHash('sha256');
-            $rsa->setSignatureMode(RSA::SIGNATURE_PKCS1);
-            $signed = $rsa->sign($message);
-
-            /**
-             * Return Base64 Encode generated signature
-             */
-            return base64_encode($signed);
-
+        $token_url = "https://marketplace.walmartapis.com/v3/token";
+        $authorization = base64_encode($consumerId . ":" . $privateKey);
+        $qos = uniqid();
+        $ch = curl_init();
+        $options = array(
+            CURLOPT_URL => $token_url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 60,
+            CURLOPT_HEADER => false,
+            CURLOPT_POST => 1,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_SSL_VERIFYPEER => 0,
+            CURLOPT_POSTFIELDS => "grant_type=client_credentials",
+            CURLOPT_HTTPHEADER => array(
+                "Authorization: Basic " . $authorization,
+                "Content-Type: application/x-www-form-urlencoded",
+                "Accept: application/json",
+                "WM_SVC.NAME: Walmart Marketplace",
+                "WM_QOS.CORRELATION_ID: " . $qos,
+                "WM_SVC.VERSION: 1.0.0"
+            ),
+        );
+        curl_setopt_array($ch, $options);
+        $response = curl_exec($ch);
+        $array = json_decode($response, true);
+        if(!empty($array['access_token'])) {
+            return $array['access_token'];
         } else {
-            throw new \Exception("Unable to load private key", 1446780146);
+            throw new \Exception("Token not received", 1446780146);
         }
     }
 
@@ -119,6 +113,6 @@ class Signature
      */
     public static function getMilliseconds()
     {
-        return (int) round(microtime(true) * 1000);
+        return round(microtime(true) * 1000);
     }
 }
